@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JsonLens — Free JSON Formatter, Validator, Tree Viewer, Diff & JSON to CSV</title>
+<meta name="description" content="JsonLens is a free online JSON toolkit: format & validate JSON with exact error line numbers, explore a collapsible tree view with search, compare two JSON documents side-by-side, and convert JSON to CSV. 100% in-browser, unlimited free usage.">
+<meta name="keywords" content="JSON formatter, JSON validator, JSON tree viewer, JSON diff, JSON to CSV, JSON minifier, JSON error line number">
+<meta property="og:title" content="JsonLens — Free JSON Formatter, Validator, Tree Viewer & Diff">
+<meta property="og:description" content="Format, validate, explore, diff and convert JSON entirely in your browser. Free forever, no signup.">
+<meta property="og:type" content="website">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is JsonLens really free? Are there any usage limits?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. JsonLens is free with unlimited usage — no accounts, no paywalls, no watermarks. You can format, validate, diff and convert as many JSON documents as you like, of any practical size." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is my JSON data uploaded to a server?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. JsonLens runs 100% in your browser. Your JSON is parsed, formatted, diffed and converted locally with JavaScript, so sensitive API responses and tokens never leave your machine." }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I find the exact line and column of a JSON error?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Paste your JSON into JsonLens and click Validate. If parsing fails, the error panel shows the parser message plus the exact line and column, with a code snippet and a caret pointing at the offending character. You can also click Auto-fix to repair common issues like trailing commas, comments and single quotes." }
+    },
+    {
+      "@type": "Question",
+      "name": "Can JsonLens compare two JSON files?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Open the Diff tab, paste the original document on the left and the modified one on the right, then click Compare. JsonLens lists every added, removed and changed value with its JSON path, color-coded for quick review." }
+    },
+    {
+      "@type": "Question",
+      "name": "How does JSON to CSV conversion handle nested objects and arrays?",
+      "acceptedAnswer": { "@type": "Answer", "text": "JsonLens flattens nested objects using dot-notation column names (for example address.city), and serializes nested arrays as compact JSON inside their cell. All fields across every row become columns, and values are CSV-escaped per RFC 4180, so the file opens cleanly in Excel and Google Sheets." }
+    },
+    {
+      "@type": "Question",
+      "name": "What is the difference between pretty-printing and minifying JSON?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Pretty-printing adds indentation and line breaks so JSON is readable by humans — ideal for debugging. Minifying strips all unnecessary whitespace so the payload is as small as possible — ideal for production APIs, logs and bandwidth savings. JsonLens does both in one click and shows the size difference." }
+    }
+  ]
+}
+</script>
+<style>
+  :root { --amber:#FBBF24; }
+  html { scroll-behavior:smooth; }
+  body { font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; background:#18181B; }
+  ::selection { background:#FBBF24; color:#18181B; }
+  .jl-scroll::-webkit-scrollbar { width:10px; height:10px; }
+  .jl-scroll::-webkit-scrollbar-track { background:#27272A; }
+  .jl-scroll::-webkit-scrollbar-thumb { background:#52525B; border-radius:6px; border:2px solid #27272A; }
+  .jl-scroll::-webkit-scrollbar-thumb:hover { background:#71717A; }
+  .jl-tab { transition:all .15s ease; }
+  .jl-tab.active { background:#27272A; color:#FBBF24; border-color:#FBBF24 !important; }
+  .jl-btn { transition:all .15s ease; }
+  .jl-btn:hover { transform:translateY(-1px); }
+  .jl-btn:active { transform:translateY(0); }
+  /* ---- tree view ---- */
+  .jl-details > summary { list-style:none; cursor:pointer; }
+  .jl-details > summary::-webkit-details-marker { display:none; }
+  .jl-caret { display:inline-block; width:1em; color:#71717A; transition:transform .12s; font-size:.8em; }
+  .jl-details[open] > summary .jl-caret { transform:rotate(90deg); }
+  .jl-details:not([open]) > summary .jl-ellipsis { display:inline; }
+  .jl-details[open] > summary .jl-ellipsis { display:none; }
+  .jl-children { margin-left:1.15em; border-left:1px solid #3F3F46; padding-left:.6em; }
+  .jl-leaf { cursor:pointer; }
+  .jl-leaf:hover { background:#27272A; border-radius:4px; }
+  mark.jl-mark { background:#FBBF24; color:#18181B; border-radius:2px; padding:0 1px; }
+  .jl-key { color:#93C5FD; }
+  .jl-str { color:#86EFAC; }
+  .jl-num { color:#FBBF24; }
+  .jl-bool { color:#F0ABFC; }
+  .jl-null { color:#71717A; font-style:italic; }
+  .jl-punc { color:#A1A1AA; }
+  .jl-count { color:#71717A; font-size:.82em; }
+  .jl-diff-add { background:rgba(34,197,94,.10); border-left:3px solid #22C55E; }
+  .jl-diff-del { background:rgba(239,68,68,.10); border-left:3px solid #EF4444; }
+  .jl-diff-chg { background:rgba(251,191,36,.10); border-left:3px solid #FBBF24; }
+  .jl-faq summary { cursor:pointer; }
+  .jl-faq summary::-webkit-details-marker { display:none; }
+  .jl-faq[open] summary .jl-plus { transform:rotate(45deg); }
+  .jl-plus { transition:transform .15s; }
+  textarea.jl-code:focus, input.jl-code:focus { outline:none; border-color:#FBBF24 !important; box-shadow:0 0 0 1px #FBBF24; }
+  @media print { .no-print { display:none !important; } }
+</style>
+</head>
+<body class="text-zinc-200 antialiased" id="top">
+
+<!-- ================= HEADER ================= -->
+<header class="sticky top-0 z-50 bg-[#111113]/95 backdrop-blur border-b border-zinc-800">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+    <a href="#top" class="flex items-center gap-2.5">
+      <span class="inline-flex items-center justify-center w-8 h-8 rounded-md bg-[#FBBF24] text-[#18181B] font-bold text-lg leading-none">{;}</span>
+      <span class="font-bold text-lg tracking-tight text-zinc-100">Json<span class="text-[#FBBF24]">Lens</span></span>
+    </a>
+    <nav class="text-sm">
+      <a href="#top" class="text-zinc-400 hover:text-[#FBBF24] transition-colors mr-5">Home</a>
+      <a href="https://fixoraa.tech" class="text-zinc-400 hover:text-[#FBBF24] transition-colors">More Tools</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ================= TOP AD (verbatim) ================= -->
+<div class="no-print mx-auto max-w-6xl px-4 sm:px-6 pt-4" role="complementary" aria-label="Advertisement">
+  <div class="mx-auto text-center" style="max-width:728px">
+    <span class="block text-[10px] tracking-[0.18em] uppercase text-slate-400 mb-1.5">Advertisement</span>
+    <div class="flex justify-center overflow-hidden">
+      <div class="origin-top scale-[0.44] sm:scale-100 shrink-0">
+        <script>
+          atOptions = { 'key' : '4e68ac77881c17fe128a46565d9a4e8c', 'format' : 'iframe', 'height' : 90, 'width' : 728, 'params' : {} };
+        </script>
+        <script src="https://www.highrevenueformat.com/4e68ac77881c17fe128a46565d9a4e8c/invoke.js"></script>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= TOOL ================= -->
+<main class="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+  <div class="flex flex-wrap items-center gap-3 mb-4">
+    <h1 class="text-2xl sm:text-3xl font-bold text-zinc-100 tracking-tight">JSON Formatter <span class="text-[#FBBF24]">&amp;</span> Toolkit</h1>
+    <span class="inline-flex items-center gap-1.5 text-xs font-semibold bg-[#FBBF24]/10 text-[#FBBF24] border border-[#FBBF24]/40 rounded-full px-3 py-1">
+      <span class="w-1.5 h-1.5 rounded-full bg-[#FBBF24] animate-pulse"></span> Unlimited Free Usage
+    </span>
+  </div>
+  <p class="text-sm text-zinc-400 mb-5 max-w-3xl">Format, validate, explore, diff and convert JSON — entirely in your browser. No signup, no uploads, no paywall.</p>
+
+  <!-- editor window -->
+  <div class="rounded-xl border border-zinc-800 bg-[#1F1F23] shadow-2xl overflow-hidden no-print">
+    <!-- tab bar -->
+    <div class="flex items-center gap-1 px-3 pt-2 bg-[#141416] border-b border-zinc-800 overflow-x-auto" role="tablist" aria-label="JsonLens modes">
+      <button class="jl-tab active whitespace-nowrap px-4 py-2 text-sm border border-transparent border-b-0 rounded-t-md text-zinc-400 hover:text-zinc-200" data-tab="format" role="tab" aria-selected="true">format.json</button>
+      <button class="jl-tab whitespace-nowrap px-4 py-2 text-sm border border-transparent border-b-0 rounded-t-md text-zinc-400 hover:text-zinc-200" data-tab="tree" role="tab" aria-selected="false">tree.json</button>
+      <button class="jl-tab whitespace-nowrap px-4 py-2 text-sm border border-transparent border-b-0 rounded-t-md text-zinc-400 hover:text-zinc-200" data-tab="diff" role="tab" aria-selected="false">diff.json</button>
+      <button class="jl-tab whitespace-nowrap px-4 py-2 text-sm border border-transparent border-b-0 rounded-t-md text-zinc-400 hover:text-zinc-200" data-tab="csv" role="tab" aria-selected="false">convert.json</button>
+    </div>
+
+    <!-- ============ FORMAT TAB ============ -->
+    <section id="tab-format" class="p-3 sm:p-4">
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <button id="btnFormat" class="jl-btn bg-[#FBBF24] text-[#18181B] font-bold text-sm px-4 py-2 rounded-md">Format</button>
+        <button id="btnMinify" class="jl-btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm px-4 py-2 rounded-md border border-zinc-700">Minify</button>
+        <button id="btnValidate" class="jl-btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm px-4 py-2 rounded-md border border-zinc-700">Validate</button>
+        <button id="btnRepair" class="jl-btn bg-zinc-800 hover:bg-zinc-700 text-emerald-300 text-sm px-4 py-2 rounded-md border border-zinc-700" title="Fix trailing commas, comments and single quotes">Auto-fix</button>
+        <select id="selIndent" class="jl-code bg-zinc-800 text-zinc-200 text-sm px-2 py-2 rounded-md border border-zinc-700" aria-label="Indentation">
+          <option value="2">Indent: 2</option>
+          <option value="4">Indent: 4</option>
+          <option value="tab">Indent: Tab</option>
+        </select>
+        <span class="flex-1"></span>
+        <button id="btnSample" class="jl-btn text-xs text-zinc-400 hover:text-[#FBBF24] px-2 py-2">Sample</button>
+        <button id="btnUpload" class="jl-btn text-xs text-zinc-400 hover:text-[#FBBF24] px-2 py-2">Upload .json</button>
+        <button id="btnClear" class="jl-btn text-xs text-zinc-400 hover:text-red-400 px-2 py-2">Clear</button>
+        <input type="file" id="fileInput" accept=".json,application/json,text/plain" class="hidden">
+      </div>
+
+      <!-- error panel -->
+      <div id="errorPanel" class="hidden mb-3 rounded-md border border-red-500/50 bg-red-500/10 p-3">
+        <div class="flex items-start gap-2">
+          <span class="text-red-400 font-bold text-sm mt-0.5">✕</span>
+          <div class="flex-1 min-w-0">
+            <p id="errorMsg" class="text-sm text-red-300 font-semibold"></p>
+            <p id="errorLoc" class="text-xs text-red-400/80 mt-0.5"></p>
+            <pre id="errorFrame" class="jl-scroll mt-2 text-xs bg-[#141416] rounded p-2 overflow-x-auto text-zinc-300"></pre>
+            <button id="btnRepairFromError" class="jl-btn mt-2 text-xs bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-500/40 rounded px-3 py-1.5">Try auto-fix &amp; re-validate</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-3">
+        <!-- input pane -->
+        <div class="rounded-lg border border-zinc-800 bg-[#141416] overflow-hidden">
+          <div class="flex items-center justify-between px-3 py-1.5 bg-[#1F1F23] border-b border-zinc-800">
+            <span class="text-xs text-zinc-500">▸ input.json</span>
+            <span id="inputSize" class="text-xs text-zinc-600">0 chars</span>
+          </div>
+          <textarea id="inputJson" class="jl-code jl-scroll w-full h-72 sm:h-96 bg-transparent text-[13px] leading-relaxed p-3 text-zinc-200 resize-y border-0" placeholder='Paste your JSON here… e.g. {"name":"Ada","role":"developer"}' spellcheck="false"></textarea>
+        </div>
+        <!-- output pane -->
+        <div class="rounded-lg border border-zinc-800 bg-[#141416] overflow-hidden">
+          <div class="flex items-center justify-between px-3 py-1.5 bg-[#1F1F23] border-b border-zinc-800">
+            <span class="text-xs text-zinc-500">▸ output.json</span>
+            <div class="flex items-center gap-2">
+              <span id="outputSize" class="text-xs text-zinc-600"></span>
+              <button id="btnCopy" class="jl-btn text-xs text-zinc-400 hover:text-[#FBBF24]">Copy</button>
+              <button id="btnDownload" class="jl-btn text-xs text-zinc-400 hover:text-[#FBBF24]">Download</button>
+            </div>
+          </div>
+          <pre id="outputJson" class="jl-scroll h-72 sm:h-96 overflow-auto text-[13px] leading-relaxed p-3 text-zinc-300"><span class="text-zinc-600">// Formatted JSON appears here. Press Format (Ctrl+Enter).</span></pre>
+        </div>
+      </div>
+
+      <!-- status bar -->
+      <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-[#FBBF24] text-[#18181B] text-xs font-semibold px-3 py-2">
+        <span id="stValid" class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-zinc-700 inline-block"></span> not checked</span>
+        <span>chars: <span id="stChars">0</span></span>
+        <span>keys: <span id="stKeys">–</span></span>
+        <span>depth: <span id="stDepth">–</span></span>
+        <span>root: <span id="stRoot">–</span></span>
+        <span id="stSaved" class="hidden sm:inline text-[#18181B]/70">saved locally ✓</span>
+      </div>
+    </section>
+
+    <!-- ============ TREE TAB ============ -->
+    <section id="tab-tree" class="p-3 sm:p-4 hidden">
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <div class="relative flex-1 min-w-[200px]">
+          <input id="treeSearch" type="text" placeholder="Search keys & values… (Enter = next match)" class="jl-code w-full bg-[#141416] border border-zinc-700 rounded-md text-sm px-3 py-2 text-zinc-200 placeholder-zinc-600">
+        </div>
+        <span id="treeMatchCount" class="text-xs text-zinc-500"></span>
+        <button id="btnExpandAll" class="jl-btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm px-3 py-2 rounded-md border border-zinc-700">Expand all</button>
+        <button id="btnCollapseAll" class="jl-btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm px-3 py-2 rounded-md border border-zinc-700">Collapse all</button>
+        <button id="btnTreeFromInput" class="jl-btn bg-[#FBBF24] text-[#18181B] font-bold text-sm px-3 py-2 rounded-md">Render tree</button>
+      </div>
+      <p class="text-xs text-zinc-500 mb-2">Tip: click any triangle to fold a node · click a leaf value to copy it · search highlights every match.</p>
+      <div id="treeView" class="jl-scroll rounded-lg border border-zinc-800 bg-[#141416] p-3 h-96 overflow-auto text-[13px] leading-7">
+        <span class="text-zinc-600">// Render a tree from the Format tab input (or paste JSON there first), then click “Render tree”.</span>
+      </div>
+    </section>
+
+    <!-- ============ DIFF TAB ============ -->
+    <section id="tab-diff" class="p-3 sm:p-4 hidden">
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <button id="btnCompare" class="jl-btn bg-[#FBBF24] text-[#18181B] font-bold text-sm px-4 py-2 rounded-md">Compare</button>
+        <button id="btnDiffSample" class="jl-btn text-xs text-zinc-400 hover:text-[#FBBF24] px-2 py-2">Load sample pair</button>
+        <button id="btnDiffClear" class="jl-btn text-xs text-zinc-400 hover:text-red-400 px-2 py-2">Clear both</button>
+        <span class="flex-1"></span>
+        <span id="diffSummary" class="text-xs text-zinc-400"></span>
+      </div>
+      <div class="grid md:grid-cols-2 gap-3">
+        <div class="rounded-lg border border-zinc-800 bg-[#141416] overflow-hidden">
+          <div class="px-3 py-1.5 bg-[#1F1F23] border-b border-zinc-800 text-xs text-zinc-500">▸ A — original</div>
+          <textarea id="diffA" class="jl-code jl-scroll w-full h-56 bg-transparent text-[13px] leading-relaxed p-3 text-zinc-200 resize-y border-0" placeholder='{"version":1,"debug":true}' spellcheck="false"></textarea>
+        </div>
+        <div class="rounded-lg border border-zinc-800 bg-[#141416] overflow-hidden">
+          <div class="px-3 py-1.5 bg-[#1F1F23] border-b border-zinc-800 text-xs text-zinc-500">▸ B — modified</div>
+          <textarea id="diffB" class="jl-code jl-scroll w-full h-56 bg-transparent text-[13px] leading-relaxed p-3 text-zinc-200 resize-y border-0" placeholder='{"version":2,"debug":true}' spellcheck="false"></textarea>
+        </div>
+      </div>
+      <div id="diffError" class="hidden mt-3 rounded-md border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-300"></div>
+      <div id="diffResults" class="mt-3 space-y-1.5">
+        <p class="text-xs text-zinc-600">// Differences appear here after you click Compare.</p>
+      </div>
+      <div class="mt-2 flex flex-wrap gap-4 text-xs text-zinc-500">
+        <span><span class="inline-block w-2.5 h-2.5 rounded-sm bg-[#22C55E] mr-1 align-middle"></span>added</span>
+        <span><span class="inline-block w-2.5 h-2.5 rounded-sm bg-[#EF4444] mr-1 align-middle"></span>removed</span>
+        <span><span class="inline-block w-2.5 h-2.5 rounded-sm bg-[#FBBF24] mr-1 align-middle"></span>changed</span>
+      </div>
+    </section>
+
+    <!-- ============ CSV TAB ============ -->
+    <section id="tab-csv" class="p-3 sm:p-4 hidden">
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <button id="btnCsv" class="jl-btn bg-[#FBBF24] text-[#18181B] font-bold text-sm px-4 py-2 rounded-md">Convert to CSV</button>
+        <button id="btnCsvSample" class="jl-btn text-xs text-zinc-400 hover:text-[#FBBF24] px-2 py-2">Sample</button>
+        <button id="btnCsvClear" class="jl-btn text-xs text-zinc-400 hover:text-red-400 px-2 py-2">Clear</button>
+        <span class="flex-1"></span>
+        <button id="btnCsvDownload" class="jl-btn hidden bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm px-4 py-2 rounded-md border border-zinc-700">Download .csv</button>
+      </div>
+      <div id="csvError" class="hidden mb-3 rounded-md border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-300"></div>
+      <textarea id="csvInput" class="jl-code jl-scroll w-full h-40 bg-[#141416] border border-zinc-800 rounded-lg text-[13px] leading-relaxed p-3 text-zinc-200 resize-y mb-3" placeholder='Paste a JSON array of objects, e.g. [{"name":"Ada","city":"London"},{"name":"Grace","city":"New York"}]' spellcheck="false"></textarea>
+      <p class="text-xs text-zinc-500 mb-2">Nested objects become <span class="text-[#FBBF24]">dot.notation</span> columns; nested arrays are stored as compact JSON in their cell.</p>
+      <div id="csvPreview" class="jl-scroll rounded-lg border border-zinc-800 bg-[#141416] overflow-auto max-h-80">
+        <p class="text-xs text-zinc-600 p-3">// The converted table preview appears here.</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= BOTTOM AD (verbatim) ================= -->
+  <div class="no-print mx-auto max-w-6xl px-4 sm:px-6 pb-4 mt-6" role="complementary" aria-label="Advertisement">
+    <div class="mx-auto text-center" style="max-width:728px">
+      <span class="block text-[10px] tracking-[0.18em] uppercase text-slate-400 mb-1.5">Advertisement</span>
+      <div class="flex justify-center overflow-hidden">
+        <script async src="https://js.wpadmngr.com/static/adManager.js" data-admpid="464498"></script>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SEO ARTICLE ================= -->
+  <article id="seo-article" class="mt-8 text-zinc-300 leading-relaxed">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-4">JSON Formatter, Validator, Tree Viewer, Diff &amp; JSON-to-CSV Converter — The Complete Guide</h2>
+
+    <h3 class="text-xl font-bold text-zinc-100 mt-8 mb-3">What is JSON, and why does everyone use it?</h3>
+    <p class="mb-4">JSON — JavaScript Object Notation — is the universal language of data exchange on the modern web. Almost every REST API returns it, most configuration files are written in it, and countless applications store their state as JSON documents. Its appeal is simple: it is human-readable, lightweight, and supported by every major programming language, from JavaScript and Python to Go, Java and Rust. A JSON document is built from just six data types — objects, arrays, strings, numbers, booleans and null — which makes the format easy to learn but surprisingly easy to break. A single missing comma or a stray single quote is enough to make an entire payload unreadable to a parser, which is exactly why a dependable JSON formatter and validator earns its place in every developer's daily toolkit.</p>
+    <p class="mb-4">In practice, JSON shows up in more places than most people realize. Frontend developers fetch it from APIs and render it in user interfaces. Backend engineers log it, queue it and shuttle it between microservices. Data analysts receive exports in JSON and need to flatten them into spreadsheets. DevOps engineers edit JSON configuration for cloud infrastructure, and mobile developers bundle it as app config. Whenever any of these documents is produced by a machine — especially a minified production payload squeezed onto a single line — reading it with human eyes is nearly impossible without formatting. That is the first job of a tool like JsonLens: take the dense, machine-shaped blob and re-present it with consistent indentation and line breaks so its structure becomes visible at a glance.</p>
+
+    <h3 class="text-xl font-bold text-zinc-100 mt-8 mb-3">Pretty-printing vs. minifying: two directions, one format</h3>
+    <p class="mb-4">Pretty-printing and minifying are opposite operations on the same document. Pretty-printing (also called beautifying) expands JSON with indentation — typically two or four spaces, or a tab — and places each key-value pair on its own line. The result is verbose but scannable, which is exactly what you want when you are debugging an API response at midnight or reviewing a configuration change before it ships. Minifying does the reverse: it strips every character that is not semantically meaningful — spaces, tabs, newlines — and compresses the document into a single line. The minified form is what production systems prefer, because smaller payloads mean less bandwidth, faster downloads and cheaper storage.</p>
+    <p class="mb-4">Both directions are lossless: formatting and minifying never change the data, only its presentation. A good formatter therefore doubles as a safety check — if the document can be pretty-printed, it is syntactically valid; if it cannot, the parser will tell you exactly where it stumbled. JsonLens reports the character count before and after each operation, so you can see precisely how many bytes minification saves. For large payloads this is more than cosmetic: shaving thirty percent off a one-megabyte API response is a real performance win for mobile users on slow networks.</p>
+
+    <h3 class="text-xl font-bold text-zinc-100 mt-8 mb-3">Validation: catching syntax errors before they reach production</h3>
+    <p class="mb-4">Validation is the stricter cousin of formatting. Where a formatter assumes the input is valid and rearranges it, a validator interrogates the input and reports every deviation from the JSON specification defined in RFC 8259. This matters because parsers are unforgiving: JSON.parse in JavaScript, json.loads in Python and their equivalents elsewhere all reject malformed input outright, often with a terse message like "Unexpected token } in JSON at position 142". Position 142 of what? Without a tool, you are left counting characters by hand through a wall of text.</p>
+    <p class="mb-4">JsonLens translates that cryptic position into something actionable: the exact line and column, a short excerpt of the surrounding code, and a caret marker pointing at the offending character. This turns a five-minute hunt into a five-second glance. Validation also runs continuously as you edit — the status bar at the bottom of the editor shows whether the current document is valid, along with live statistics such as total characters, key count, nesting depth and root type. These numbers are genuinely useful: an unexpectedly deep nesting level or a key count of zero often reveals a truncated copy-paste or a logging artifact before you waste time debugging downstream code.</p>
+
+    <h3 class="text-xl font-bold text-zinc-100 mt-8 mb-3">The seven most common JSON errors (and how to fix them)</h3>
+    <p class="mb-4">After years of answering "why won't this parse" questions, the same mistakes appear again and again. First, the missing comma between members — the single most frequent offender, usually introduced when deleting or reordering lines. Second, the trailing comma after the last item in an object or array; JavaScript object literals tolerate it, but strict JSON does not. Third, single-quoted strings: developers who spend their day writing JavaScript habitually write {'key': 'value'}, which is a valid JS literal but invalid JSON — the specification mandates double quotes. Fourth, unquoted keys such as {name: "Ada"}, another habit carried over from JavaScript. Fifth, comments: many configuration formats (JSONC, JSON5) allow // and /* */ comments, and editors happily accept them, but a strict parser will choke. Sixth, special numeric values like NaN and Infinity, which look numeric but are not part of the JSON grammar — use null instead. Seventh, invisible characters: a byte-order mark at the start of a file, smart quotes pasted from a word processor, or a stray control character can all produce "unexpected token" errors at position zero that look utterly baffling until you strip them.</p>
+    <p class="mb-4">JsonLens includes an auto-fix engine that repairs the recoverable members of this list in one click: it strips line and block comments, removes trailing commas, and converts single-quoted strings to properly escaped double-quoted strings. Auto-fix is deliberately conservative — it never guesses at missing commas or restructures your data, because silently "fixing" structural errors would be worse than reporting them. After repair, the document is re-validated so you can confirm the result before copying it into your project. For the errors auto-fix cannot repair, the line-and-column pinpointing tells you exactly where to look.</p>
+
+    <h3 class="text-xl font-bold text-zinc-100 mt-8 mb-3">Tree view: navigating large and deeply nested payloads</h3>
+    <p class="mb-4">A formatted document is readable, but a ten-thousand-line API response is still ten thousand lines. Tree view solves the scale problem by rendering JSON as an interactive, collapsible hierarchy — the same mental model your browser's developer tools use. Each object and array becomes a foldable node; clicking its triangle expands or collapses the subtree, and a small counter shows how many children hide inside each collapsed branch. Suddenly a massive payload becomes a table of contents you can drill into, one branch at a time.</p>
+    <p class="mb-4">JsonLens pairs its tree with live search: type a key or value and every match is highlighted in amber, with a running count of results and Enter-to-jump navigation between them. Branches containing matches auto-expand so nothing stays hidden. Each leaf value is clickable to copy just that value, and every node carries its JSON path — handy when you need to reference $.orders[2].items[0].sku in documentation or a JSONPath query. For anyone spelunking through unfamiliar API responses, webhook deliveries or crash-report dumps, tree-plus-search is dramatically faster than scrolling through formatted text.</p>
+
+    <h3 class="text-xl font-bold text-zinc-100 mt-8 mb-3">Diffing JSON: spotting what changed between two documents</h3>
+    <p class="mb-4">Sooner or later every developer faces the same question: what changed between these two payloads? Perhaps a staging API returns something different from production, a configuration drifted between deploys, or a test fixture no longer matches the recorded response. Eyeballing two large JSON documents is hopeless; generic text diffs are better but noisy, because they flag reordered keys and reformatted whitespace as changes even when the data is identical.</p>
+    <p class="mb-4">A structural JSON diff compares meaning, not text. JsonLens walks both documents as trees and reports three kinds of change: added keys, removed keys and changed values — each annotated with its full JSON path, such as $.user.address.city. Results are color-coded (green for added, red for removed, amber for changed) and each changed row shows the old and new values side by side. Arrays are compared element by element, so an appended item shows up as an addition rather than a rewrite of the whole array. Type changes — a field that was a number becoming a string, for example — are flagged explicitly, since those are the silent breakers of downstream code. The diff summary also totals each change type, giving you a one-line answer to "how different are these, really?" before you inspect the details.</p>
+
+    <h3 class="text-xl font-bold text-zinc-100 mt-8 mb-3">JSON to CSV: from API responses to spreadsheets</h3>
+    <p class="mb-4">APIs speak JSON, but spreadsheets, business-intelligence tools and many data pipelines speak CSV. Converting between the two is a weekly chore for analysts, QA engineers and anyone who needs to hand a data extract to a non-technical colleague. The conversion is not trivial, because JSON is hierarchical and CSV is flat: nested objects must be flattened, arrays must be serialized somehow, and rows with different shapes must still share one header row.</p>
+    <p class="mb-4">JsonLens handles the conversion with a predictable flattening strategy. Each object in the input array becomes one CSV row. Nested objects are flattened with dot-notation column names — address.city, address.zip — so no information is lost and the hierarchy stays recoverable. Nested arrays are stored as compact JSON strings inside their cell, which preserves the data exactly while keeping the table rectangular. The header row is the union of every field found across all rows, so ragged documents (where some rows have fields others lack) still convert cleanly, with empty cells where a row lacks a column. Values are escaped according to RFC 4180 — quotes doubled, fields containing commas, quotes or newlines wrapped in quotes — so the downloaded file opens correctly in Microsoft Excel, Google Sheets and LibreOffice. A live table preview shows exactly what the CSV will contain before you download it.</p>
+
+    <h3 class="text-xl font-bold text-zinc-100 mt-8 mb-3">Privacy: why client-side processing matters</h3>
+    <p class="mb-4">JSON payloads are rarely innocent. They contain authentication tokens, personal data, internal hostnames, database connection strings and business figures — exactly the kind of information you do not want transiting a stranger's server. A surprising number of online formatters send your pasted data to a backend for processing, which means your API keys and customer records end up in someone else's logs. JsonLens takes the opposite approach: every operation — parsing, formatting, tree rendering, diffing and CSV conversion — runs locally in your browser with plain JavaScript. Nothing is uploaded, nothing is logged, and the tool keeps working even if you disconnect from the network after the page loads. Your last valid input is remembered in your browser's local storage so you can pick up where you left off, and it never leaves your device.</p>
+
+    <h3 class="text-xl font-bold text-zinc-100 mt-8 mb-3">Practical tips for working with JSON every day</h3>
+    <p class="mb-4">A few habits make JSON work dramatically smoother. First, validate before you paste: run any unfamiliar payload through the validator before wiring it into code, and you will catch encoding issues early. Second, minify before you log: production logs full of pretty-printed JSON waste storage and slow down log search — minify payloads at the boundary. Third, diff before you deploy: when an API version changes, diff the old and new sample responses to generate an accurate changelog instead of discovering breaking changes from bug reports. Fourth, keep a canonical sample: store one known-good response per endpoint and diff live responses against it in tests. Fifth, mind your numbers: JSON numbers are IEEE 754 doubles, so integers beyond 2^53 lose precision — APIs that emit large IDs should send them as strings, and a formatter will not warn you about this, so stay alert. Finally, prefer explicit nulls over missing keys when a field's absence is meaningful; diffs and CSV exports both become far more predictable when the schema is stable.</p>
+    <p class="mb-4">Whether you are debugging a misbehaving webhook, auditing a configuration drift, exploring a new API or preparing a data extract for analysis, the workflow is the same: paste, validate, understand, transform. JsonLens compresses that entire loop into a single page — format and minify in the editor, explore in the tree, compare in the diff view, export in the converter — with no accounts, no uploads and no limits. Keep it bookmarked; the next time a parser throws "unexpected token at position 0", you will know exactly where to look.</p>
+  </article>
+
+  <!-- ================= FAQS ================= -->
+  <section class="mt-10">
+    <h2 class="text-2xl font-bold text-zinc-100 mb-4">Frequently Asked Questions</h2>
+    <div class="space-y-3">
+      <details class="jl-faq rounded-lg border border-zinc-800 bg-[#1F1F23] p-4">
+        <summary class="flex items-center justify-between gap-3 text-zinc-100 font-semibold text-sm sm:text-base"><span itemprop="name">Is JsonLens really free? Are there any usage limits?</span><span class="jl-plus text-[#FBBF24] text-xl leading-none shrink-0">+</span></summary>
+        <p class="text-sm text-zinc-400 mt-2 leading-relaxed">Yes. JsonLens is free with unlimited usage — no accounts, no paywalls, no watermarks. You can format, validate, diff and convert as many JSON documents as you like, of any practical size.</p>
+      </details>
+      <details class="jl-faq rounded-lg border border-zinc-800 bg-[#1F1F23] p-4">
+        <summary class="flex items-center justify-between gap-3 text-zinc-100 font-semibold text-sm sm:text-base"><span itemprop="name">Is my JSON data uploaded to a server?</span><span class="jl-plus text-[#FBBF24] text-xl leading-none shrink-0">+</span></summary>
+        <p class="text-sm text-zinc-400 mt-2 leading-relaxed">No. JsonLens runs 100% in your browser. Your JSON is parsed, formatted, diffed and converted locally with JavaScript, so sensitive API responses and tokens never leave your machine.</p>
+      </details>
+      <details class="jl-faq rounded-lg border border-zinc-800 bg-[#1F1F23] p-4">
+        <summary class="flex items-center justify-between gap-3 text-zinc-100 font-semibold text-sm sm:text-base"><span itemprop="name">How do I find the exact line and column of a JSON error?</span><span class="jl-plus text-[#FBBF24] text-xl leading-none shrink-0">+</span></summary>
+        <p class="text-sm text-zinc-400 mt-2 leading-relaxed">Paste your JSON and click Validate. If parsing fails, the error panel shows the parser message plus the exact line and column, with a code snippet and a caret pointing at the offending character. You can also click Auto-fix to repair common issues like trailing commas, comments and single quotes.</p>
+      </details>
+      <details class="jl-faq rounded-lg border border-zinc-800 bg-[#1F1F23] p-4">
+        <summary class="flex items-center justify-between gap-3 text-zinc-100 font-semibold text-sm sm:text-base"><span itemprop="name">Can JsonLens compare two JSON files?</span><span class="jl-plus text-[#FBBF24] text-xl leading-none shrink-0">+</span></summary>
+        <p class="text-sm text-zinc-400 mt-2 leading-relaxed">Yes. Open the Diff tab, paste the original document on the left and the modified one on the right, then click Compare. JsonLens lists every added, removed and changed value with its JSON path, color-coded for quick review.</p>
+      </details>
+      <details class="jl-faq rounded-lg border border-zinc-800 bg-[#1F1F23] p-4">
+        <summary class="flex items-center justify-between gap-3 text-zinc-100 font-semibold text-sm sm:text-base"><span itemprop="name">How does JSON to CSV conversion handle nested objects and arrays?</span><span class="jl-plus text-[#FBBF24] text-xl leading-none shrink-0">+</span></summary>
+        <p class="text-sm text-zinc-400 mt-2 leading-relaxed">JsonLens flattens nested objects using dot-notation column names (for example address.city), and serializes nested arrays as compact JSON inside their cell. All fields across every row become columns, and values are CSV-escaped per RFC 4180, so the file opens cleanly in Excel and Google Sheets.</p>
+      </details>
+      <details class="jl-faq rounded-lg border border-zinc-800 bg-[#1F1F23] p-4">
+        <summary class="flex items-center justify-between gap-3 text-zinc-100 font-semibold text-sm sm:text-base"><span itemprop="name">What is the difference between pretty-printing and minifying JSON?</span><span class="jl-plus text-[#FBBF24] text-xl leading-none shrink-0">+</span></summary>
+        <p class="text-sm text-zinc-400 mt-2 leading-relaxed">Pretty-printing adds indentation and line breaks so JSON is readable by humans — ideal for debugging. Minifying strips all unnecessary whitespace so the payload is as small as possible — ideal for production APIs, logs and bandwidth savings. JsonLens does both in one click and shows the size difference.</p>
+      </details>
+    </div>
+  </section>
+</main>
+
+<!-- ================= FOOTER ================= -->
+<footer class="border-t border-zinc-800 mt-12">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+    <p class="text-xs text-zinc-500"><span class="text-zinc-300 font-semibold">JsonLens</span> — free JSON toolkit. Your data never leaves your browser.</p>
+    <nav class="text-xs text-zinc-500">
+      <a href="#top" class="hover:text-[#FBBF24] mr-4">Home</a>
+      <a href="https://fixoraa.tech" class="hover:text-[#FBBF24]">More Tools</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+/* ============================================================
+   JsonLens core logic. Pure functions (no DOM) live between the
+   __PURE_START__ / __PURE_END__ markers so they can be unit-
+   tested in Node. UI wiring follows after the markers.
+   ============================================================ */
+/* __PURE_START__ */
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+/* Convert a 0-based character position into 1-based line/column. */
+function locatePosition(text, pos) {
+  pos = Math.max(0, Math.min(pos, text.length));
+  var line = 1, col = 1;
+  for (var i = 0; i < pos; i++) {
+    if (text[i] === '\n') { line++; col = 1; } else { col++; }
+  }
+  return { line: line, column: col };
+}
+
+/* Pull "at position N" out of a JSON.parse error message. */
+function extractPosition(msg) {
+  var m = /at position (\d+)/.exec(msg);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/* Small code frame: the error line plus one line of context each side. */
+function codeFrame(text, pos) {
+  var loc = locatePosition(text, pos);
+  var lines = text.split('\n');
+  var i = loc.line - 1;
+  var out = [];
+  for (var r = Math.max(0, i - 1); r <= Math.min(lines.length - 1, i + 1); r++) {
+    out.push(String(r + 1).padStart(4, ' ') + ' | ' + lines[r]);
+    if (r === i) out.push('      | ' + ' '.repeat(loc.column - 1) + '^');
+  }
+  return out.join('\n');
+}
+
+/* Parse with rich error info. Never throws. */
+function parseJson(text) {
+  if (!text || !text.trim()) {
+    return { ok: false, value: null, error: { message: 'Input is empty — paste some JSON to begin.', line: 1, column: 1, pos: 0, frame: '(empty input)' } };
+  }
+  try {
+    return { ok: true, value: JSON.parse(text), error: null };
+  } catch (e) {
+    var msg = e && e.message ? e.message : 'Invalid JSON';
+    var pos = extractPosition(msg);
+    if (pos === null) pos = text.length; /* e.g. "Unexpected end of JSON input" */
+    var loc = locatePosition(text, pos);
+    return { ok: false, value: null, error: { message: msg, line: loc.line, column: loc.column, pos: pos, frame: codeFrame(text, pos) } };
+  }
+}
+
+function prettyPrint(text, indent) {
+  var r = parseJson(text);
+  if (!r.ok) return { ok: false, output: '', error: r.error };
+  var ind = (indent === 'tab') ? '\t' : ' '.repeat(indent === 4 ? 4 : 2);
+  return { ok: true, output: JSON.stringify(r.value, null, ind), error: null };
+}
+
+function minifyJson(text) {
+  var r = parseJson(text);
+  if (!r.ok) return { ok: false, output: '', error: r.error };
+  return { ok: true, output: JSON.stringify(r.value), error: null };
+}
+
+/* Conservative auto-repair: strip // and block comments, drop trailing
+   commas, convert single-quoted strings to double-quoted. Never throws. */
+function repairJson(text) {
+  var out = '', i = 0, n = text.length;
+  while (i < n) {
+    var c = text[i];
+    if (c === '"') { /* copy double-quoted string verbatim */
+      out += c; i++;
+      while (i < n) {
+        var d = text[i]; out += d;
+        if (d === '\\' && i + 1 < n) { out += text[i + 1]; i += 2; continue; }
+        i++;
+        if (d === '"') break;
+      }
+      continue;
+    }
+    if (c === "'") { /* convert single-quoted string */
+      out += '"'; i++;
+      while (i < n) {
+        var s = text[i];
+        if (s === '\\' && i + 1 < n) {
+          if (text[i + 1] === "'") { out += "'"; i += 2; continue; } /* \' is invalid in JSON */
+          out += s + text[i + 1]; i += 2; continue;
+        }
+        if (s === "'") { out += '"'; i++; break; }
+        if (s === '"') { out += '\\"'; i++; continue; }
+        out += s; i++;
+      }
+      continue;
+    }
+    if (c === '/' && text[i + 1] === '/') { while (i < n && text[i] !== '\n') i++; continue; }
+    if (c === '/' && text[i + 1] === '*') {
+      i += 2;
+      while (i < n && !(text[i] === '*' && text[i + 1] === '/')) i++;
+      i += 2; continue;
+    }
+    if (c === ',') {
+      var j = i + 1;
+      while (j < n && /\s/.test(text[j])) j++;
+      if (text[j] === '}' || text[j] === ']') { i++; continue; } /* trailing comma */
+    }
+    out += c; i++;
+  }
+  return out;
+}
+
+/* Parse, falling back to a repaired copy. Reports whether repair was used. */
+function tryParseLenient(text) {
+  var strict = parseJson(text);
+  if (strict.ok) return { ok: true, value: strict.value, repaired: false, error: null };
+  var repaired = repairJson(text);
+  var again = parseJson(repaired);
+  if (again.ok) return { ok: true, value: again.value, repaired: true, error: null };
+  return { ok: false, value: null, repaired: false, error: strict.error };
+}
+
+function typeOf(v) {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return 'array';
+  return typeof v;
+}
+
+/* Document statistics: key count, max depth, value count, root type. */
+function docStats(value) {
+  var keys = 0, depth = 0, values = 0;
+  (function walk(v, d) {
+    values++;
+    if (d > depth) depth = d;
+    if (v !== null && typeof v === 'object') {
+      if (Array.isArray(v)) { v.forEach(function (x) { walk(x, d + 1); }); }
+      else { Object.keys(v).forEach(function (k) { keys++; walk(v[k], d + 1); }); }
+    }
+  })(value, 1);
+  return { keys: keys, depth: depth, values: values, root: typeOf(value) };
+}
+
+/* Highlight query matches inside already-escaped HTML. */
+function hi(escapedText, q) {
+  if (!q) return escapedText;
+  var eq = escHtml(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escapedText.replace(new RegExp('(' + eq + ')', 'gi'), '<mark class="jl-mark">$1</mark>');
+}
+
+/* Recursive tree node -> HTML string. Containers use <details> so the
+   browser handles expand/collapse natively. Matches auto-open. */
+function renderNode(key, value, path, q, depth) {
+  var t = typeOf(value);
+  var ql = (q || '').toLowerCase();
+  var keyHtml = (key === null || key === undefined)
+    ? ''
+    : '<span class="jl-key">' + hi(escHtml(JSON.stringify(key)), q) + '</span><span class="jl-punc">: </span>';
+  var dispPath = escHtml(path);
+
+  function matchesSelf() {
+    if (!ql) return false;
+    var hay = '';
+    if (key !== null && key !== undefined) hay += String(key) + ' ';
+    hay += (t === 'string') ? value : JSON.stringify(value);
+    return hay.toLowerCase().indexOf(ql) !== -1;
+  }
+
+  if (t === 'object' || t === 'array') {
+    var isArr = t === 'array';
+    var entries = isArr ? value.map(function (v, i) { return [i, v]; }) : Object.keys(value).map(function (k) { return [k, value[k]]; });
+    var openB = isArr ? '[' : '{', closeB = isArr ? ']' : '}';
+    if (entries.length === 0) {
+      return { html: '<div class="jl-leaf" data-path="' + dispPath + '">' + keyHtml +
+        '<span class="jl-punc">' + openB + closeB + '</span></div>', hasMatch: matchesSelf() };
+    }
+    var kids = '', anyMatch = matchesSelf();
+    entries.forEach(function (e) {
+      var ck = e[0], cv = e[1];
+      var childPath = isArr ? path + '[' + ck + ']' : path + '.' + ck;
+      var child = renderNode(ck, cv, childPath, q, depth + 1);
+      if (child.hasMatch) anyMatch = true;
+      kids += child.html;
+    });
+    var count = isArr ? entries.length + (entries.length === 1 ? ' item' : ' items')
+                      : entries.length + (entries.length === 1 ? ' key' : ' keys');
+    var html = '<details class="jl-details" data-path="' + dispPath + '"' + (anyMatch || depth < 2 ? ' open' : '') + '>' +
+      '<summary class="jl-summary">' + '<span class="jl-caret">▶</span>' + keyHtml +
+      '<span class="jl-punc">' + openB + '</span> <span class="jl-count">' + count + '</span>' +
+      '<span class="jl-ellipsis jl-punc"> …' + closeB + '</span></summary>' +
+      '<div class="jl-children">' + kids + '</div>' +
+      '<div><span class="jl-punc">' + closeB + '</span></div></details>';
+    return { html: html, hasMatch: anyMatch };
+  }
+
+  var valHtml;
+  if (t === 'string') valHtml = '<span class="jl-str">' + hi(escHtml(JSON.stringify(value)), q) + '</span>';
+  else if (t === 'number') valHtml = '<span class="jl-num">' + hi(escHtml(String(value)), q) + '</span>';
+  else if (t === 'boolean') valHtml = '<span class="jl-bool">' + hi(escHtml(String(value)), q) + '</span>';
+  else valHtml = '<span class="jl-null">null</span>';
+  return {
+    html: '<div class="jl-leaf" data-path="' + dispPath + '" title="Click to copy value">' + keyHtml + valHtml + '</div>',
+    hasMatch: matchesSelf()
+  };
+}
+
+function renderTree(value, query) {
+  return renderNode(null, value, '$', query || '', 0).html;
+}
+
+/* Structural diff -> [{type:'added'|'removed'|'changed', path, oldVal, newVal}] */
+function diffJson(a, b, path, out) {
+  path = path || '$'; out = out || [];
+  var ta = typeOf(a), tb = typeOf(b);
+  if (ta !== tb) { out.push({ type: 'changed', path: path, oldVal: a, newVal: b, typeChanged: true }); return out; }
+  if (ta === 'object') {
+    var keys = {};
+    Object.keys(a).forEach(function (k) { keys[k] = 1; });
+    Object.keys(b).forEach(function (k) { keys[k] = 1; });
+    Object.keys(keys).forEach(function (k) {
+      var p = path + '.' + k;
+      var ha = Object.prototype.hasOwnProperty.call(a, k), hb = Object.prototype.hasOwnProperty.call(b, k);
+      if (!ha) out.push({ type: 'added', path: p, oldVal: undefined, newVal: b[k] });
+      else if (!hb) out.push({ type: 'removed', path: p, oldVal: a[k], newVal: undefined });
+      else diffJson(a[k], b[k], p, out);
+    });
+    return out;
+  }
+  if (ta === 'array') {
+    var m = Math.max(a.length, b.length);
+    for (var i = 0; i < m; i++) {
+      var p2 = path + '[' + i + ']';
+      if (i >= a.length) out.push({ type: 'added', path: p2, oldVal: undefined, newVal: b[i] });
+      else if (i >= b.length) out.push({ type: 'removed', path: p2, oldVal: a[i], newVal: undefined });
+      else diffJson(a[i], b[i], p2, out);
+    }
+    return out;
+  }
+  if (a !== b) out.push({ type: 'changed', path: path, oldVal: a, newVal: b });
+  return out;
+}
+
+function shortVal(v) {
+  if (v === undefined) return '—';
+  var s = JSON.stringify(v);
+  return s.length > 90 ? s.slice(0, 87) + '…' : s;
+}
+
+/* Flatten nested objects with dot notation; nested arrays -> JSON string. */
+function flattenObj(obj, prefix, out) {
+  out = out || {};
+  if (obj !== null && typeof obj === 'object' && !Array.isArray(obj)) {
+    var keys = Object.keys(obj);
+    if (keys.length === 0) { out[prefix || 'value'] = '{}'; return out; }
+    keys.forEach(function (k) {
+      var p = prefix ? prefix + '.' + k : k;
+      var v = obj[k];
+      if (v !== null && typeof v === 'object' && !Array.isArray(v)) flattenObj(v, p, out);
+      else if (Array.isArray(v)) out[p] = JSON.stringify(v);
+      else out[p] = v;
+    });
+  } else {
+    out[prefix || 'value'] = obj;
+  }
+  return out;
+}
+
+function csvCell(v) {
+  if (v === undefined || v === null) return '';
+  var s = String(v);
+  return (/[",\n\r]/.test(s)) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+/* JSON -> {headers, rows, csv}. Accepts an array of objects, a single
+   object, or an array of scalars. Never throws. */
+function jsonToCsv(value) {
+  var arr = Array.isArray(value) ? value : [value];
+  if (arr.length === 0) return { headers: [], rows: [], csv: '' };
+  var rows = arr.map(function (r) {
+    return (r !== null && typeof r === 'object' && !Array.isArray(r)) ? flattenObj(r, '', {}) : { value: r };
+  });
+  var headers = [];
+  rows.forEach(function (r) {
+    Object.keys(r).forEach(function (k) { if (headers.indexOf(k) < 0) headers.push(k); });
+  });
+  var lines = [headers.map(csvCell).join(',')];
+  rows.forEach(function (r) {
+    lines.push(headers.map(function (h) { return csvCell(r[h]); }).join(','));
+  });
+  return { headers: headers, rows: rows, csv: lines.join('\r\n') };
+}
+
+function renderTable(headers, rows) {
+  if (!headers.length) return '<p class="text-xs text-zinc-600 p-3">Nothing to show.</p>';
+  var h = '<table class="w-full text-xs border-collapse"><thead><tr>' +
+    headers.map(function (x) { return '<th class="text-left font-semibold text-[#FBBF24] border-b border-zinc-700 px-3 py-2 whitespace-nowrap sticky top-0 bg-[#141416]">' + escHtml(x) + '</th>'; }).join('') +
+    '</tr></thead><tbody>';
+  rows.forEach(function (r, i) {
+    h += '<tr class="' + (i % 2 ? 'bg-[#1B1B1E]' : '') + '">' +
+      headers.map(function (col) {
+        var v = r[col];
+        var txt = (v === undefined || v === null) ? '' : String(v);
+        if (txt.length > 120) txt = txt.slice(0, 117) + '…';
+        return '<td class="border-b border-zinc-800/60 px-3 py-1.5 text-zinc-300 whitespace-nowrap max-w-[260px] overflow-hidden text-ellipsis" title="' + escHtml(String(v === undefined || v === null ? '' : v)) + '">' + escHtml(txt) + '</td>';
+      }).join('') + '</tr>';
+  });
+  return h + '</tbody></table>';
+}
+/* __PURE_END__ */
+
+/* ============================================================
+   UI WIRING (DOM)
+   ============================================================ */
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var input = $('inputJson'), output = $('outputJson');
+  var lastCsv = '';
+
+  var SAMPLE = {
+    store: 'JsonLens demo shop',
+    open: true,
+    established: 2019,
+    rating: 4.8,
+    tags: ['books', 'electronics', 'sale'],
+    address: { city: 'Bengaluru', zip: '560001', country: 'IN' },
+    inventory: [
+      { sku: 'BK-101', name: 'Notebook', price: 4.99, inStock: true },
+      { sku: 'EL-205', name: 'USB-C Cable', price: 9.5, inStock: false }
+    ],
+    owner: null
+  };
+
+  /* ---------- tabs ---------- */
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.jl-tab'));
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () {
+      tabs.forEach(function (x) { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
+      t.classList.add('active'); t.setAttribute('aria-selected', 'true');
+      ['format', 'tree', 'diff', 'csv'].forEach(function (name) {
+        $('tab-' + name).classList.toggle('hidden', name !== t.dataset.tab);
+      });
+    });
+  });
+
+  /* ---------- status + validation ---------- */
+  function setError(err) {
+    var p = $('errorPanel');
+    if (!err) { p.classList.add('hidden'); return; }
+    p.classList.remove('hidden');
+    $('errorMsg').textContent = err.message;
+    $('errorLoc').textContent = 'Line ' + err.line + ', column ' + err.column + ' (character ' + err.pos + ')';
+    $('errorFrame').textContent = err.frame;
+  }
+  function updateStatus(valid, value, chars) {
+    var st = $('stValid');
+    if (valid === null) { st.innerHTML = '<span class="w-2 h-2 rounded-full bg-zinc-700 inline-block"></span> not checked'; }
+    else if (valid) { st.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-700 inline-block"></span> valid JSON ✓'; }
+    else { st.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-700 inline-block"></span> invalid ✕'; }
+    $('stChars').textContent = chars;
+    if (valid && value !== undefined) {
+      var s = docStats(value);
+      $('stKeys').textContent = s.keys; $('stDepth').textContent = s.depth; $('stRoot').textContent = s.root;
+    } else { $('stKeys').textContent = '–'; $('stDepth').textContent = '–'; $('stRoot').textContent = '–'; }
+  }
+  function validateLive() {
+    var text = input.value;
+    $('inputSize').textContent = text.length + ' chars';
+    if (!text.trim()) { setError(null); updateStatus(null, undefined, text.length); return; }
+    var r = parseJson(text);
+    setError(r.ok ? null : r.error);
+    updateStatus(r.ok, r.value, text.length);
+  }
+  input.addEventListener('input', function () {
+    validateLive();
+    try { localStorage.setItem('jsonlens-input', input.value); } catch (e) {}
+  });
+
+  /* ---------- format actions ---------- */
+  function showOutput(res) {
+    if (res.ok) {
+      setError(null);
+      output.innerHTML = '';
+      output.textContent = res.output;
+      $('outputSize').textContent = res.output.length + ' chars';
+      var r = parseJson(input.value);
+      updateStatus(true, r.value, input.value.length);
+    } else {
+      setError(res.error);
+      updateStatus(false, undefined, input.value.length);
+    }
+  }
+  $('btnFormat').addEventListener('click', function () {
+    showOutput(prettyPrint(input.value, $('selIndent').value === 'tab' ? 'tab' : parseInt($('selIndent').value, 10)));
+  });
+  $('btnMinify').addEventListener('click', function () { showOutput(minifyJson(input.value)); });
+  $('btnValidate').addEventListener('click', validateLive);
+  function doRepair() {
+    if (!input.value.trim()) return;
+    var r = tryParseLenient(input.value);
+    if (r.ok) {
+      input.value = prettyPrint(repairJson(input.value), 2).output || JSON.stringify(r.value, null, 2);
+      validateLive();
+      showOutput({ ok: true, output: input.value });
+      try { localStorage.setItem('jsonlens-input', input.value); } catch (e) {}
+    } else { setError(r.error); updateStatus(false, undefined, input.value.length); }
+  }
+  $('btnRepair').addEventListener('click', doRepair);
+  $('btnRepairFromError').addEventListener('click', doRepair);
+  $('btnSample').addEventListener('click', function () {
+    input.value = JSON.stringify(SAMPLE, null, 2);
+    validateLive();
+    try { localStorage.setItem('jsonlens-input', input.value); } catch (e) {}
+  });
+  $('btnClear').addEventListener('click', function () {
+    input.value = ''; output.innerHTML = '<span class="text-zinc-600">// Formatted JSON appears here. Press Format (Ctrl+Enter).</span>';
+    $('outputSize').textContent = ''; validateLive();
+    try { localStorage.removeItem('jsonlens-input'); } catch (e) {}
+  });
+  $('btnUpload').addEventListener('click', function () { $('fileInput').click(); });
+  $('fileInput').addEventListener('change', function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () { input.value = String(rd.result || ''); validateLive(); };
+    rd.readAsText(f);
+    e.target.value = '';
+  });
+  $('btnCopy').addEventListener('click', function () {
+    var t = output.textContent;
+    if (navigator.clipboard) navigator.clipboard.writeText(t).catch(function () {});
+  });
+  $('btnDownload').addEventListener('click', function () {
+    var blob = new Blob([output.textContent], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'formatted.json'; a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+  });
+  document.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !$('tab-format').classList.contains('hidden')) {
+      e.preventDefault(); $('btnFormat').click();
+    }
+  });
+
+  /* ---------- tree ---------- */
+  var treeSearchTimer = null;
+  function renderTreeView() {
+    var r = parseJson(input.value);
+    if (!r.ok) {
+      $('treeView').innerHTML = '<span class="text-red-400 text-xs">Cannot render tree: input is not valid JSON. Fix errors in the Format tab first.</span>';
+      $('treeMatchCount').textContent = '';
+      return;
+    }
+    var q = $('treeSearch').value.trim();
+    $('treeView').innerHTML = renderTree(r.value, q);
+    var marks = $('treeView').querySelectorAll('mark.jl-mark').length;
+    $('treeMatchCount').textContent = q ? (marks + (marks === 1 ? ' match' : ' matches')) : '';
+  }
+  $('btnTreeFromInput').addEventListener('click', renderTreeView);
+  $('treeSearch').addEventListener('input', function () {
+    clearTimeout(treeSearchTimer);
+    treeSearchTimer = setTimeout(renderTreeView, 250);
+  });
+  $('treeSearch').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      var marks = Array.prototype.slice.call($('treeView').querySelectorAll('mark.jl-mark'));
+      if (!marks.length) return;
+      var idx = marks.findIndex(function (m) { return m.dataset.cur === '1'; });
+      if (idx >= 0) delete marks[idx].dataset.cur;
+      var next = marks[(idx + 1) % marks.length];
+      next.dataset.cur = '1';
+      next.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      marks.forEach(function (m) { m.style.outline = ''; });
+      next.style.outline = '2px solid #FBBF24';
+    }
+  });
+  $('btnExpandAll').addEventListener('click', function () {
+    Array.prototype.forEach.call($('treeView').querySelectorAll('details'), function (d) { d.open = true; });
+  });
+  $('btnCollapseAll').addEventListener('click', function () {
+    Array.prototype.forEach.call($('treeView').querySelectorAll('details'), function (d) { d.open = false; });
+  });
+  $('treeView').addEventListener('click', function (e) {
+    var leaf = e.target.closest('.jl-leaf');
+    if (!leaf || e.target.closest('summary')) return;
+    var val = leaf.textContent.replace(/^"[^"]*":\s*/, '').trim();
+    if (navigator.clipboard) navigator.clipboard.writeText(val).catch(function () {});
+    leaf.style.background = '#3F3F46';
+    setTimeout(function () { leaf.style.background = ''; }, 300);
+  });
+
+  /* ---------- diff ---------- */
+  $('btnDiffSample').addEventListener('click', function () {
+    $('diffA').value = JSON.stringify({ version: 1, debug: true, host: 'api.example.com', limits: { rpm: 60, burst: 10 }, tags: ['v1'] }, null, 2);
+    $('diffB').value = JSON.stringify({ version: 2, debug: false, host: 'api.example.com', limits: { rpm: 120, burst: 10, window: '1m' }, tags: ['v1', 'v2'], region: 'eu' }, null, 2);
+  });
+  $('btnDiffClear').addEventListener('click', function () {
+    $('diffA').value = ''; $('diffB').value = '';
+    $('diffResults').innerHTML = '<p class="text-xs text-zinc-600">// Differences appear here after you click Compare.</p>';
+    $('diffSummary').textContent = ''; $('diffError').classList.add('hidden');
+  });
+  $('btnCompare').addEventListener('click', function () {
+    var ra = parseJson($('diffA').value), rb = parseJson($('diffB').value);
+    var errBox = $('diffError');
+    if (!ra.ok || !rb.ok) {
+      errBox.classList.remove('hidden');
+      errBox.textContent = 'Both documents must be valid JSON. ' +
+        (!ra.ok ? 'Document A: ' + ra.error.message + ' (line ' + ra.error.line + ', col ' + ra.error.column + '). ' : '') +
+        (!rb.ok ? 'Document B: ' + rb.error.message + ' (line ' + rb.error.line + ', col ' + rb.error.column + ').' : '');
+      return;
+    }
+    errBox.classList.add('hidden');
+    var changes = diffJson(ra.value, rb.value);
+    var counts = { added: 0, removed: 0, changed: 0 };
+    changes.forEach(function (c) { counts[c.type]++; });
+    $('diffSummary').textContent = changes.length
+      ? changes.length + ' difference' + (changes.length === 1 ? '' : 's') + ' — ' + counts.added + ' added, ' + counts.removed + ' removed, ' + counts.changed + ' changed'
+      : 'Documents are identical ✓';
+    if (!changes.length) {
+      $('diffResults').innerHTML = '<p class="text-sm text-emerald-400">✓ No differences — the two documents are structurally identical.</p>';
+      return;
+    }
+    var cls = { added: 'jl-diff-add', removed: 'jl-diff-del', changed: 'jl-diff-chg' };
+    var label = { added: 'ADDED', removed: 'REMOVED', changed: 'CHANGED' };
+    $('diffResults').innerHTML = changes.map(function (c) {
+      var body = c.type === 'added'
+        ? '<span class="text-emerald-300">' + escHtml(shortVal(c.newVal)) + '</span>'
+        : c.type === 'removed'
+          ? '<span class="text-red-300">' + escHtml(shortVal(c.oldVal)) + '</span>'
+          : '<span class="text-red-300/90 line-through">' + escHtml(shortVal(c.oldVal)) + '</span> <span class="text-[#FBBF24]">' + escHtml(shortVal(c.newVal)) + '</span>' +
+            (c.typeChanged ? ' <span class="text-xs text-zinc-500">(type changed)</span>' : '');
+      return '<div class="' + cls[c.type] + ' rounded px-3 py-2 text-[13px]">' +
+        '<span class="text-[10px] font-bold tracking-wider text-zinc-500 mr-2">' + label[c.type] + '</span>' +
+        '<span class="text-sky-300">' + escHtml(c.path) + '</span> <span class="text-zinc-600">=</span> ' + body + '</div>';
+    }).join('');
+  });
+
+  /* ---------- csv ---------- */
+  $('btnCsvSample').addEventListener('click', function () {
+    $('csvInput').value = JSON.stringify([
+      { name: 'Ada', role: 'Engineer', address: { city: 'London', zip: 'E1 6AN' }, skills: ['C', 'Ada'] },
+      { name: 'Grace', role: 'Admiral', address: { city: 'New York', zip: '10001' }, active: true }
+    ], null, 2);
+  });
+  $('btnCsvClear').addEventListener('click', function () {
+    $('csvInput').value = '';
+    $('csvPreview').innerHTML = '<p class="text-xs text-zinc-600 p-3">// The converted table preview appears here.</p>';
+    $('btnCsvDownload').classList.add('hidden'); $('csvError').classList.add('hidden');
+    lastCsv = '';
+  });
+  $('btnCsv').addEventListener('click', function () {
+    var r = parseJson($('csvInput').value);
+    var errBox = $('csvError');
+    if (!r.ok) {
+      errBox.classList.remove('hidden');
+      errBox.textContent = 'Invalid JSON: ' + r.error.message + ' (line ' + r.error.line + ', column ' + r.error.column + ').';
+      return;
+    }
+    errBox.classList.add('hidden');
+    var res = jsonToCsv(r.value);
+    lastCsv = res.csv;
+    $('csvPreview').innerHTML = renderTable(res.headers, res.rows);
+    $('btnCsvDownload').classList.toggle('hidden', !res.csv);
+  });
+  $('btnCsvDownload').addEventListener('click', function () {
+    if (!lastCsv) return;
+    var blob = new Blob(['\uFEFF' + lastCsv], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'converted.csv'; a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+  });
+
+  /* ---------- restore last input ---------- */
+  try {
+    var saved = localStorage.getItem('jsonlens-input');
+    if (saved) { input.value = saved; validateLive(); $('stSaved').classList.remove('hidden'); }
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>
